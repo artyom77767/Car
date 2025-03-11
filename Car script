@@ -1,0 +1,115 @@
+local player = game:GetService("Players").LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:FindFirstChild("HumanoidRootPart")
+local hum = char:FindFirstChildOfClass("Humanoid")
+local screenGui = Instance.new("ScreenGui", player:FindFirstChild("PlayerGui"))
+local speedLabel = Instance.new("TextLabel", screenGui)
+local gearLabel = Instance.new("TextLabel", screenGui)
+
+screenGui.Name = "CarUI"
+speedLabel.Size = UDim2.new(0, 200, 0, 50)
+speedLabel.Position = UDim2.new(1, -210, 1, -110)
+speedLabel.BackgroundTransparency = 1
+speedLabel.TextScaled = true
+speedLabel.TextColor3 = Color3.new(1, 1, 1)
+speedLabel.Font = Enum.Font.SourceSansBold
+
+gearLabel.Size = UDim2.new(0, 200, 0, 50)
+gearLabel.Position = UDim2.new(1, -210, 1, -60)
+gearLabel.BackgroundTransparency = 1
+gearLabel.TextScaled = true
+gearLabel.TextColor3 = Color3.new(1, 1, 1)
+gearLabel.Font = Enum.Font.SourceSansBold
+
+local tool = Instance.new("Tool")
+tool.Name = "Enable Car"
+tool.RequiresHandle = false
+tool.Parent = player.Backpack
+
+local enabled = false
+local maxSpeed = 100
+local acceleration = 0.05
+local gearSpeeds = {0, 10, 25, 45, 70, 100} -- Adjusted gear 2 for better scaling
+local currentGear = 1
+local velocity = Vector3.new(0, 0, 0)
+local angularVelocity = 0
+local turnSpeed = 2.0 -- Slightly reduced turning speed
+local driftFactor = 0.8
+local drag = 0.99 -- Adjusted for smoother deceleration
+local parkingBrake = true
+local moving = false
+local inputStates = {}
+local cameraLocked = false
+
+local function toggleCar()
+    enabled = not enabled
+    if enabled then
+        hum.Sit = true
+    else
+        hum.Sit = false
+    end
+end
+
+tool.Activated:Connect(toggleCar)
+
+local function updateGear(change)
+    currentGear = math.clamp(currentGear + change, 1, #gearSpeeds)
+    gearLabel.Text = "Gear: " .. currentGear
+end
+
+local UIS = game:GetService("UserInputService")
+UIS.InputBegan:Connect(function(input, processed)
+    if processed or not enabled then return end
+    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D then
+        inputStates[input.KeyCode] = true
+    elseif input.KeyCode == Enum.KeyCode.Q then
+        updateGear(-1)
+    elseif input.KeyCode == Enum.KeyCode.E then
+        updateGear(1)
+    elseif input.KeyCode == Enum.KeyCode.P then
+        cameraLocked = not cameraLocked
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if inputStates[input.KeyCode] then
+        inputStates[input.KeyCode] = false
+    end
+end)
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    if enabled then
+        local moveDir = Vector3.new(0, 0, 0)
+        local turnDir = 0
+        if inputStates[Enum.KeyCode.W] then moveDir = moveDir + hrp.CFrame.LookVector end
+        if inputStates[Enum.KeyCode.S] then moveDir = moveDir - hrp.CFrame.LookVector end
+        if inputStates[Enum.KeyCode.A] then turnDir = turnDir + 0.08 end -- Slightly reduced turning speed
+        if inputStates[Enum.KeyCode.D] then turnDir = turnDir - 0.08 end -- Slightly reduced turning speed
+        
+        if moveDir.Magnitude > 0 then
+            moving = true
+            velocity = velocity + moveDir.Unit * acceleration * gearSpeeds[currentGear] * 0.05 -- Greatly slowed TP walk
+            parkingBrake = false
+        else
+            moving = false
+        end
+        
+        velocity = velocity * drag -- Apply drag for gradual slow down
+        if velocity.Magnitude > gearSpeeds[currentGear] then
+            velocity = velocity.Unit * gearSpeeds[currentGear]
+        end
+
+        velocity = velocity:Lerp(hrp.CFrame.LookVector * velocity.Magnitude, driftFactor * 0.5)
+
+        angularVelocity = angularVelocity + turnDir * turnSpeed
+        angularVelocity = angularVelocity * 0.9
+        hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(angularVelocity), 0)
+        hrp.CFrame = hrp.CFrame + velocity * 0.1
+
+        if cameraLocked then
+            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, hrp.Position + hrp.CFrame.LookVector * 10)
+        end
+        
+        speedLabel.Text = "Speed: " .. math.floor(velocity.Magnitude) .. " u/s"
+    end
+end)

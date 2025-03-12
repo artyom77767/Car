@@ -1,10 +1,28 @@
 local player = game:GetService("Players").LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
-local hrp = char:FindFirstChild("HumanoidRootPart")
+local hrp = char:WaitForChild("HumanoidRootPart")
 local hum = char:FindFirstChildOfClass("Humanoid")
+local camera = workspace.CurrentCamera
+
+-- Create an invisible platform for hovering
+local platform = Instance.new("Part")
+platform.Size = Vector3.new(5, 1, 5)
+platform.Transparency = 1
+platform.Anchored = true
+platform.CanCollide = true
+platform.Parent = workspace
+
+local function updatePlatform()
+    if char and hrp then
+        platform.Position = hrp.Position - Vector3.new(0, 3, 0) -- Keeps the platform under the character
+    end
+end
+
+-- UI for speed, gear, and turn speed
 local screenGui = Instance.new("ScreenGui", player:FindFirstChild("PlayerGui"))
 local speedLabel = Instance.new("TextLabel", screenGui)
 local gearLabel = Instance.new("TextLabel", screenGui)
+local turnSpeedLabel = Instance.new("TextLabel", screenGui)
 
 screenGui.Name = "CarUI"
 speedLabel.Size = UDim2.new(0, 200, 0, 50)
@@ -21,6 +39,15 @@ gearLabel.TextScaled = true
 gearLabel.TextColor3 = Color3.new(1, 1, 1)
 gearLabel.Font = Enum.Font.SourceSansBold
 
+turnSpeedLabel.Size = UDim2.new(0, 200, 0, 50)
+turnSpeedLabel.Position = UDim2.new(1, -210, 0, 10)
+turnSpeedLabel.BackgroundTransparency = 1
+turnSpeedLabel.TextScaled = true
+turnSpeedLabel.TextColor3 = Color3.new(1, 1, 1)
+turnSpeedLabel.Font = Enum.Font.SourceSansBold
+turnSpeedLabel.Text = "Turn Speed: 1.0"
+
+-- Tool activation
 local tool = Instance.new("Tool")
 tool.Name = "Enable Car"
 tool.RequiresHandle = false
@@ -28,18 +55,16 @@ tool.Parent = player.Backpack
 
 local enabled = false
 local maxSpeed = 100
-local acceleration = 0.05
-local gearSpeeds = {0, 10, 25, 45, 70, 100} -- Adjusted gear 2 for better scaling
+local acceleration = 0.1
+local gearSpeeds = {0, 10, 25, 45, 70, 100} 
 local currentGear = 1
 local velocity = Vector3.new(0, 0, 0)
 local angularVelocity = 0
-local turnSpeed = 2.0 -- Slightly reduced turning speed
+local turnSpeed = 1.0 
 local driftFactor = 0.8
-local drag = 0.99 -- Adjusted for smoother deceleration
-local parkingBrake = true
-local moving = false
-local inputStates = {}
+local drag = 0.99 
 local cameraLocked = false
+local inputStates = {}
 
 local function toggleCar()
     enabled = not enabled
@@ -57,6 +82,11 @@ local function updateGear(change)
     gearLabel.Text = "Gear: " .. currentGear
 end
 
+local function updateTurnSpeed(change)
+    turnSpeed = math.clamp(turnSpeed + change, 0.5, 5.0)
+    turnSpeedLabel.Text = "Turn Speed: " .. string.format("%.1f", turnSpeed)
+end
+
 local UIS = game:GetService("UserInputService")
 UIS.InputBegan:Connect(function(input, processed)
     if processed or not enabled then return end
@@ -68,6 +98,10 @@ UIS.InputBegan:Connect(function(input, processed)
         updateGear(1)
     elseif input.KeyCode == Enum.KeyCode.P then
         cameraLocked = not cameraLocked
+    elseif input.KeyCode == Enum.KeyCode.Minus then
+        updateTurnSpeed(-0.1)
+    elseif input.KeyCode == Enum.KeyCode.Equals then
+        updateTurnSpeed(0.1)
     end
 end)
 
@@ -77,24 +111,21 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
+-- Movement & Camera Logic
 game:GetService("RunService").RenderStepped:Connect(function()
     if enabled then
         local moveDir = Vector3.new(0, 0, 0)
         local turnDir = 0
         if inputStates[Enum.KeyCode.W] then moveDir = moveDir + hrp.CFrame.LookVector end
         if inputStates[Enum.KeyCode.S] then moveDir = moveDir - hrp.CFrame.LookVector end
-        if inputStates[Enum.KeyCode.A] then turnDir = turnDir + 0.08 end -- Slightly reduced turning speed
-        if inputStates[Enum.KeyCode.D] then turnDir = turnDir - 0.08 end -- Slightly reduced turning speed
+        if inputStates[Enum.KeyCode.A] then turnDir = turnDir + 0.08 end
+        if inputStates[Enum.KeyCode.D] then turnDir = turnDir - 0.08 end
         
         if moveDir.Magnitude > 0 then
-            moving = true
-            velocity = velocity + moveDir.Unit * acceleration * gearSpeeds[currentGear] * 0.05 -- Greatly slowed TP walk
-            parkingBrake = false
-        else
-            moving = false
+            velocity = velocity + moveDir.Unit * acceleration * gearSpeeds[currentGear] * 0.05
         end
         
-        velocity = velocity * drag -- Apply drag for gradual slow down
+        velocity = velocity * drag 
         if velocity.Magnitude > gearSpeeds[currentGear] then
             velocity = velocity.Unit * gearSpeeds[currentGear]
         end
@@ -106,8 +137,12 @@ game:GetService("RunService").RenderStepped:Connect(function()
         hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(angularVelocity), 0)
         hrp.CFrame = hrp.CFrame + velocity * 0.1
 
+        -- Update hovering platform
+        updatePlatform()
+
+        -- Lock camera to face forward
         if cameraLocked then
-            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, hrp.Position + hrp.CFrame.LookVector * 10)
+            camera.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 5, -10), hrp.Position + hrp.CFrame.LookVector * 10)
         end
         
         speedLabel.Text = "Speed: " .. math.floor(velocity.Magnitude) .. " u/s"

@@ -148,3 +148,31 @@ game:GetService("RunService").RenderStepped:Connect(function()
         speedLabel.Text = "Speed: " .. math.floor(velocity.Magnitude) .. " u/s"
     end
 end)
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    if enabled then
+        -- Existing movement and physics calculations
+        -- ...
+
+        -- Calculate the current speed
+        local speed = velocity.Magnitude
+
+        -- Compute the downforce magnitude
+        local forceMagnitude = speed * downforceCoefficient
+
+        -- Apply the downforce
+        downforce.Force = Vector3.new(0, -forceMagnitude, 0)
+
+        -- Update hovering platform
+        updatePlatform()
+
+        -- Lock camera to face forward if cameraLocked
+        if cameraLocked then
+            camera.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 5, -10), hrp.Position + hrp.CFrame.LookVector * 10)
+        end
+
+        -- Update UI elements
+        speedLabel.Text = "Speed: " .. math.floor(speed) .. " u/s"
+    end
+end)
+
